@@ -12,6 +12,7 @@ from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from .tools import TOOL_SCHEMAS, ToolContext, execute_tool
+from ..llm.client import assistant_message_to_dict
 from ..storage import repository as repo
 
 
@@ -21,7 +22,7 @@ def react_loop(
     system_prompt: str,
     db_session: Session,
     on_push=None,
-    max_turns: int = 10,
+    max_turns: int = 6,
 ) -> Generator[dict, None, None]:
     """执行 ReAct 循环，通过 yield 返回每一步的状态。
 
@@ -34,7 +35,7 @@ def react_loop(
             content: str (thought/final/error)
     """
     session_id = str(uuid.uuid4())
-    ctx = ToolContext(session=db_session, on_push=on_push)
+    ctx = ToolContext(session=db_session, on_push=on_push, restrict_web_tools=True)
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -42,19 +43,25 @@ def react_loop(
             "role": "user",
             "content": (
                 "请判断当前是否适合推送知识卡片。"
-                "先通过工具了解用户设置、历史、反馈和领域信息，"
-                "然后搜索素材并决定推送或跳过。"
+                "先用工具了解用户设置、历史、反馈和领域信息，"
+                "选定领域与知识点后，由你直接撰写并调用 pushKnowledgeCard；"
+                "不要依赖网页搜索，也不要因搜索无结果而 skipPush。"
+                "仅当推送时机或设置明显不合适时才 skipPush。"
             ),
         },
     ]
 
     for step in range(max_turns):
+        # 每轮开始前刷新 session，确保读到最新的领域/设置变更
+        db_session.expire_all()
+
         try:
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 tools=TOOL_SCHEMAS,
                 max_tokens=4096,
+                timeout=60.0,
             )
         except Exception as e:
             repo.save_agent_log(db_session, session_id, "error", content=str(e))
@@ -70,6 +77,8 @@ def react_loop(
             yield {"type": "thought", "content": msg.content}
 
         if msg.tool_calls:
+            messages.append(assistant_message_to_dict(msg))
+
             for tc in msg.tool_calls:
                 tool_name = tc.function.name
                 try:
@@ -102,24 +111,16 @@ def react_loop(
                 }
 
                 messages.append({
-                    "role": "assistant",
-                    "content": msg.content,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            },
-                        }
-                    ],
-                })
-                messages.append({
                     "role": "tool",
                     "tool_call_id": tc.id,
                     "content": result,
                 })
+
+                # 工具执行后立即提交，确保写入持久化
+                try:
+                    db_session.commit()
+                except Exception:
+                    db_session.rollback()
 
                 if tool_name in ("pushKnowledgeCard", "skipPush"):
                     repo.save_agent_log(

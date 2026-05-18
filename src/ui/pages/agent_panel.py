@@ -6,13 +6,15 @@ import threading
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QFrame, QSizePolicy
+    QFrame, QSizePolicy
 )
 from PySide6.QtGui import QFont
 
+from ..widgets import SmoothScrollArea, PageHeader
 from ..styles import (
-    BG_CARD, BORDER, ACCENT, ACCENT_LIGHT, RADIUS_MD, RADIUS_LG,
-    TEXT_PRIMARY, TEXT_SECONDARY, FONT_MONO, SUCCESS, WARNING, DANGER
+    BG_CARD, BORDER_LIGHT, ACCENT, RADIUS_MD,
+    TEXT_PRIMARY, TEXT_SECONDARY, FONT_MONO, SUCCESS, WARNING, DANGER,
+    PAGE_MARGIN_H, PAGE_MARGIN_V, primary_button_style,
 )
 
 
@@ -26,40 +28,28 @@ class AgentPanel(QWidget):
         self._session_factory = db_session_factory
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 28, 32, 28)
-        layout.setSpacing(16)
+        layout.setContentsMargins(PAGE_MARGIN_H, PAGE_MARGIN_V, PAGE_MARGIN_H, PAGE_MARGIN_V)
+        layout.setSpacing(20)
 
-        # 头部
-        header = QHBoxLayout()
-        title = QLabel("Agent 执行面板")
-        title.setProperty("cssClass", "page-title")
-        header.addWidget(title)
-        header.addStretch()
-
-        self.push_btn = QPushButton("🚀  手动推送")
-        self.push_btn.setFixedHeight(38)
+        page_header = PageHeader(
+            "智能推送",
+            "查看 Agent 的思考、搜索、决策全过程，每步实时更新",
+        )
+        self.push_btn = QPushButton("手动推送")
+        self.push_btn.setCursor(Qt.PointingHandCursor)
+        self.push_btn.setStyleSheet(primary_button_style(height=36))
         self.push_btn.clicked.connect(self.push_requested.emit)
-        header.addWidget(self.push_btn)
-        layout.addLayout(header)
-
-        desc = QLabel("查看 Agent 的思考、搜索、决策全过程，每步实时更新")
-        desc.setProperty("cssClass", "page-desc")
-        layout.addWidget(desc)
+        page_header.add_action(self.push_btn)
+        layout.addWidget(page_header)
 
         # 时间线滚动区域
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{
-                border: none;
-                background: transparent;
-            }}
-        """)
+        scroll = SmoothScrollArea()
 
         self.timeline_widget = QWidget()
         self.timeline = QVBoxLayout(self.timeline_widget)
         self.timeline.setAlignment(Qt.AlignTop)
-        self.timeline.setSpacing(8)
+        self.timeline.setSpacing(10)
+        self.timeline.setContentsMargins(0, 0, 4, 16)
 
         scroll.setWidget(self.timeline_widget)
         layout.addWidget(scroll, 1)
@@ -90,7 +80,7 @@ class AgentPanel(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {BG_CARD};
-                border: 1px solid {BORDER};
+                border: 1px solid {BORDER_LIGHT};
                 border-radius: {RADIUS_MD};
                 padding: 12px;
             }}
@@ -99,8 +89,8 @@ class AgentPanel(QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(6)
 
-        icon_label = QLabel("💭  思考")
-        icon_label.setStyleSheet("font-weight: 600; font-size: 12px; color: #6366f1;")
+        icon_label = QLabel("思考")
+        icon_label.setStyleSheet(f"font-weight: 600; font-size: 12px; color: {ACCENT};")
         layout.addWidget(icon_label)
 
         text = QLabel(content)
@@ -115,7 +105,7 @@ class AgentPanel(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {BG_CARD};
-                border: 1px solid {BORDER};
+                border: 1px solid {BORDER_LIGHT};
                 border-left: 3px solid {ACCENT};
                 border-radius: {RADIUS_MD};
                 padding: 12px;
@@ -126,10 +116,7 @@ class AgentPanel(QWidget):
         layout.setSpacing(4)
 
         header = QHBoxLayout()
-        icon = QLabel("🔧")
-        header.addWidget(icon)
-
-        name = QLabel(f"调用工具: {tool_name}")
+        name = QLabel(f"调用 · {tool_name}")
         name.setStyleSheet(f"font-weight: 600; font-size: 13px; color: {TEXT_PRIMARY};")
         header.addWidget(name)
         header.addStretch()
@@ -147,8 +134,8 @@ class AgentPanel(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {BG_CARD};
-                border: 1px solid {BORDER};
-                border-left: 3px solid #22c55e;
+                border: 1px solid {BORDER_LIGHT};
+                border-left: 3px solid {SUCCESS};
                 border-radius: {RADIUS_MD};
                 padding: 12px;
             }}
@@ -158,9 +145,7 @@ class AgentPanel(QWidget):
         layout.setSpacing(4)
 
         header = QHBoxLayout()
-        icon = QLabel("👁")
-        header.addWidget(icon)
-        name = QLabel(f"{tool_name} 返回结果")
+        name = QLabel(f"结果 · {tool_name}")
         name.setStyleSheet(f"font-weight: 600; font-size: 13px; color: {TEXT_PRIMARY};")
         header.addWidget(name)
         header.addStretch()
@@ -185,8 +170,6 @@ class AgentPanel(QWidget):
         # 判断是推送还是跳过
         is_push = result and '"status": "success"' in result
         color = SUCCESS if is_push else WARNING
-        emoji = "✅" if is_push else "⏭️"
-
         card.setStyleSheet(f"""
             QFrame {{
                 background: {"#f0fdf4" if is_push else "#fffbeb"};
@@ -199,7 +182,7 @@ class AgentPanel(QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(6)
 
-        header = QLabel(f"{emoji}  最终决策")
+        header = QLabel("最终决策")
         header.setStyleSheet(f"font-weight: 700; font-size: 14px; color: {color};")
         layout.addWidget(header)
 
@@ -225,7 +208,7 @@ class AgentPanel(QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(4)
 
-        header = QLabel("❌  错误")
+        header = QLabel("错误")
         header.setStyleSheet(f"font-weight: 700; font-size: 14px; color: {DANGER};")
         layout.addWidget(header)
 
@@ -235,30 +218,52 @@ class AgentPanel(QWidget):
 
         self.timeline.addWidget(card)
 
-    def run_agent_flow(self, llm_client, model: str, system_prompt: str, on_push):
+    def run_agent_flow(
+        self,
+        llm_client,
+        model: str,
+        system_prompt: str,
+        on_push,
+        on_finished=None,
+    ):
         """在后台线程运行 Agent 流程，通过 Signal 更新 UI。"""
-        from ...storage import repository as repo
         from ...agent.react_loop import react_loop
+
+        # 断开旧信号，避免累积和内存泄漏
+        if hasattr(self, "_step_signal") and self._step_signal is not None:
+            self._step_signal.step.disconnect()
+            if on_finished:
+                try:
+                    self._step_signal.finished.disconnect(on_finished)
+                except (RuntimeError, TypeError):
+                    pass
+            self._step_signal.deleteLater()
+            self._step_signal = None
 
         self.clear()
 
-        # 加入初始提示
-        self._add_thought("正在启动 Agent，准备分析推送时机...")
+        self._add_thought(f"正在连接模型 ({model})，开始分析推送时机...")
 
         db_session = self._session_factory()
 
         def run():
             try:
-                for step in react_loop(llm_client, model, system_prompt, db_session, on_push=on_push):
-                    self._step_signal.emit(step)
+                for step in react_loop(
+                    llm_client, model, system_prompt, db_session, on_push=on_push
+                ):
+                    self._step_signal.step.emit(step)
             finally:
                 db_session.close()
+                self._step_signal.finished.emit()
 
         self._step_signal = _StepSignal()
         self._step_signal.step.connect(self.add_step)
+        if on_finished:
+            self._step_signal.finished.connect(on_finished)
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
 
 class _StepSignal(QWidget):
     step = Signal(dict)
+    finished = Signal()

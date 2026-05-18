@@ -1,12 +1,14 @@
-"""自定义标题栏 —— frameless 窗口 + 品牌名/状态点 + 窗口控制。"""
+"""标题栏 —— 可拖拽顶栏 + 简洁窗口控制。"""
 
 from PySide6.QtCore import Qt, Signal, QPoint
-from PySide6.QtGui import QMouseEvent, QIcon
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QSizePolicy
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
+
+from .styles import BG_TITLEBAR, BORDER_GLASS, TEXT_PRIMARY, TEXT_SECONDARY, SUCCESS, BG_FILL
 
 
 class TitleBar(QWidget):
-    """可拖拽的自定义标题栏。"""
+    """可拖拽标题栏。"""
 
     minimize_clicked = Signal()
     maximize_clicked = Signal()
@@ -16,63 +18,90 @@ class TitleBar(QWidget):
         super().__init__(parent)
         self._dragging = False
         self._drag_pos = QPoint()
-        self.setFixedHeight(40)
+        self.setFixedHeight(48)
         self.setObjectName("titleBar")
+        self.setStyleSheet(f"""
+            #titleBar {{
+                background: {BG_TITLEBAR};
+                border-bottom: 1px solid {BORDER_GLASS};
+            }}
+        """)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 0, 8, 0)
+        layout.setContentsMargins(14, 0, 10, 0)
         layout.setSpacing(0)
 
-        # 左侧 —— 品牌名 + 状态点
-        left = QHBoxLayout()
-        left.setSpacing(8)
+        # 状态指示点
+        self.status_dot = QLabel()
+        self.status_dot.setFixedSize(8, 8)
+        self.status_dot.setStyleSheet(
+            f"background: {SUCCESS}; border-radius: 4px;"
+        )
+        layout.addWidget(self.status_dot)
+        layout.addStretch()
 
-        self.status_dot = QLabel("●")
-        self.status_dot.setStyleSheet("color: #22c55e; font-size: 10px;")
-        self.status_dot.setFixedWidth(14)
-        left.addWidget(self.status_dot)
-
-        brand = QLabel("Knowledge Push")
-        brand.setStyleSheet("font-weight: 600; font-size: 13px; color: #1a1d2e;")
-        left.addWidget(brand)
-
-        left.addStretch()
-        layout.addLayout(left, 1)
-
-        # 右侧 —— 窗口控制按钮
-        for icon, signal_name, css_class in [
-            ("─", "minimize_clicked", "min-btn"),
-            ("□", "maximize_clicked", "max-btn"),
-            ("✕", "close_clicked", "close-btn"),
-        ]:
-            btn = QPushButton(icon)
-            btn.setFixedSize(32, 28)
-            btn.setStyleSheet(self._btn_style(css_class))
-            btn.clicked.connect(getattr(self, signal_name))
-            layout.addWidget(btn)
-
-    def _btn_style(self, css_class: str) -> str:
-        base = """
-            QPushButton {
+        # 窗口控制按钮
+        btn_style = f"""
+            QPushButton {{
                 background: transparent;
                 border: none;
-                border-radius: 6px;
-                font-size: 14px;
-                color: #6b7280;
-                padding: 0;
-            }
-            QPushButton:hover { background: #e5e7eb; }
+                border-radius: 4px;
+                color: {TEXT_SECONDARY};
+                font-size: 13px;
+                font-weight: 500;
+                min-width: 28px;
+                min-height: 24px;
+            }}
+            QPushButton:hover {{
+                background: {BG_FILL};
+                color: {TEXT_PRIMARY};
+            }}
         """
-        if css_class == "close-btn":
-            base += "QPushButton:hover { background: #ef4444; color: #ffffff; }"
-        return base
+
+        min_btn = QPushButton("—")  # em dash
+        min_btn.setCursor(Qt.PointingHandCursor)
+        min_btn.setStyleSheet(btn_style)
+        min_btn.clicked.connect(self.minimize_clicked.emit)
+        layout.addWidget(min_btn)
+
+        max_btn = QPushButton("⧉")  # square / maximize icon
+        max_btn.setCursor(Qt.PointingHandCursor)
+        max_btn.setStyleSheet(btn_style)
+        max_btn.clicked.connect(self.maximize_clicked.emit)
+        layout.addWidget(max_btn)
+
+        close_btn = QPushButton("✕")  # ✕
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                color: {TEXT_SECONDARY};
+                font-size: 14px;
+                font-weight: 500;
+                min-width: 28px;
+                min-height: 24px;
+            }}
+            QPushButton:hover {{
+                background: #FF3B30;
+                color: #FFFFFF;
+            }}
+        """)
+        close_btn.clicked.connect(self.close_clicked.emit)
+        layout.addWidget(close_btn)
 
     def set_status(self, online: bool):
-        color = "#22c55e" if online else "#9ca3af"
-        self.status_dot.setStyleSheet(f"color: {color}; font-size: 10px;")
+        color = SUCCESS if online else "#C7C7CC"
+        self.status_dot.setStyleSheet(
+            f"background: {color}; border-radius: 4px;"
+        )
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:
+            child = self.childAt(event.position().toPoint())
+            if isinstance(child, QPushButton):
+                return super().mousePressEvent(event)
             self._dragging = True
             self._drag_pos = event.globalPosition().toPoint()
 
@@ -88,4 +117,6 @@ class TitleBar(QWidget):
         self._dragging = False
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
-        self.maximize_clicked.emit()
+        child = self.childAt(event.position().toPoint())
+        if not isinstance(child, QPushButton):
+            self.maximize_clicked.emit()

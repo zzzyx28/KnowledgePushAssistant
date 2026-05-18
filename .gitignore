@@ -1,21 +1,57 @@
-# Python
+# ── Python ──
 __pycache__/
 *.py[cod]
 *.egg-info/
+*.egg
 dist/
 build/
+*.spec
+*.manifest
+*.exe
+*.dmg
+*.app
+*.pkg
+
+# ── Virtual environments ──
 venv/
 .venv/
+env/
+.env/
+pip-wheel-metadata/
 
-# IDE
+# ── IDE / Editor ──
 .vscode/
 .idea/
 .cursor/
-
-# OS
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
 
-# Environment
+# ── Environment & Secrets ──
 .env
 .env.local
+.env.*.local
+*.key
+secrets.*
+
+# ── Database & User data ──
+*.db
+*.sqlite3
+settings.json
+
+# ── OS ──
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# ── Claude ──
+.claude/
+
+# ── Screenshot placeholder ──
+!assets/screenshots/.gitkeep

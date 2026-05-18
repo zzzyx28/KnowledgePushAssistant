@@ -20,7 +20,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "searchWeb",
-            "description": "搜索互联网获取知识素材，返回标题、摘要、URL列表",
+            "description": "（可选）搜索互联网；仅用于需核实时效性外部信息时，每轮推送最多调用1次。常规知识点请直接撰写，勿依赖搜索",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -35,7 +35,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "fetchWebContent",
-            "description": "抓取指定URL的网页正文内容",
+            "description": "（可选）抓取网页正文；仅在 searchWeb 已有可靠 URL 且确需补充细节时使用，勿反复抓取",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -109,7 +109,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "pushKnowledgeCard",
-            "description": "生成并保存知识卡片，触发推送通知",
+            "description": "根据领域与用户偏好直接撰写并保存知识卡片（无需网页素材），触发推送通知",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -128,7 +128,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "skipPush",
-            "description": "跳过本次推送（素材不足、时机不对等）",
+            "description": "跳过本次推送；仅用于推送关闭、超出时间窗口等时机/设置问题，不得因搜索无结果而跳过",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -145,49 +145,63 @@ TOOL_SCHEMAS = [
 class ToolContext:
     """持有数据库 session 和回调，供工具函数使用。"""
 
-    def __init__(self, session: Session, on_push=None):
+    def __init__(self, session: Session, on_push=None, restrict_web_tools: bool = False):
         self.session = session
         self.on_push = on_push  # 推送后的回调，用于通知UI
+        self.restrict_web_tools = restrict_web_tools
+        self.web_search_count = 0
+        self.web_fetch_count = 0
 
 
 # ── 工具函数实现 ──
 
 def _search_web(ctx: ToolContext, query: str, topK: int = 5) -> str:
+    if ctx.restrict_web_tools and ctx.web_search_count >= 1:
+        return json.dumps({
+            "skipped": True,
+            "message": "本轮已达网页搜索上限，请直接撰写知识点并调用 pushKnowledgeCard",
+        }, ensure_ascii=False)
+    ctx.web_search_count += 1
     results = search_web(query, top_k=topK)
+    if not results:
+        return json.dumps({
+            "results": [],
+            "message": "未搜到结果，请基于自身知识撰写卡片，勿再次搜索或 skipPush",
+        }, ensure_ascii=False)
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 
 def _fetch_web_content(ctx: ToolContext, url: str) -> str:
+    if ctx.restrict_web_tools and ctx.web_fetch_count >= 1:
+        return json.dumps({
+            "skipped": True,
+            "message": "本轮已达网页抓取上限，请直接撰写知识点并调用 pushKnowledgeCard",
+        }, ensure_ascii=False)
+    ctx.web_fetch_count += 1
     content = fetch_web_content(url)
     return content[:5000]
 
 
 def _read_user_settings(ctx: ToolContext) -> str:
+    ctx.session.expire_all()
     settings = repo.get_all_settings(ctx.session)
     return json.dumps(settings, ensure_ascii=False, indent=2)
 
 
 def _read_push_history(ctx: ToolContext, limit: int = 10) -> str:
-    history = repo.get_recent_push_history(ctx.session, limit=limit)
-    result = []
-    for h in history:
-        item = repo.get_knowledge_item_by_id(ctx.session, h.knowledge_item_id)
-        result.append({
-            "id": h.id,
-            "pushed_at": h.pushed_at.isoformat() if h.pushed_at else None,
-            "title": item.title if item else "(已删除)",
-            "domain_name": item.domain_name if item else "",
-            "is_clicked": h.is_clicked,
-        })
+    ctx.session.expire_all()
+    result = repo.get_recent_push_history_with_titles(ctx.session, limit=limit)
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 def _read_user_feedback(ctx: ToolContext, limit: int = 20) -> str:
+    ctx.session.expire_all()
     feedback = repo.get_user_feedback(ctx.session, limit=limit)
     return json.dumps(feedback, ensure_ascii=False, indent=2)
 
 
 def _get_domain_stats(ctx: ToolContext) -> str:
+    ctx.session.expire_all()
     stats = repo.get_domain_stats(ctx.session)
     return json.dumps(stats, ensure_ascii=False, indent=2)
 
@@ -205,6 +219,7 @@ def _get_current_time(ctx: ToolContext) -> str:
 
 
 def _list_domains(ctx: ToolContext) -> str:
+    ctx.session.expire_all()
     domains = repo.get_all_domains(ctx.session)
     result = [
         {

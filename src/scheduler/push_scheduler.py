@@ -28,6 +28,8 @@ class PushScheduler:
             IntervalTrigger(minutes=interval_minutes),
             id="push_job",
             replace_existing=True,
+            max_instances=1,
+            coalesce=True,
         )
         if not self._scheduler.running:
             self._scheduler.start()
@@ -50,6 +52,8 @@ class PushScheduler:
                 IntervalTrigger(minutes=interval_minutes),
                 id="push_job",
                 replace_existing=True,
+                max_instances=1,
+                coalesce=True,
             )
 
     def is_within_time_window(self, start_hour: int, end_hour: int) -> bool:

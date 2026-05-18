@@ -17,13 +17,21 @@ from .models import (
 # ── 领域 CRUD ──
 
 def get_all_domains(session: Session) -> list[KnowledgeDomain]:
-    return session.query(KnowledgeDomain).order_by(KnowledgeDomain.sort_order).all()
+    """获取所有领域（强制刷新，避免 session 缓存导致读到旧数据）。"""
+    return (
+        session.query(KnowledgeDomain)
+        .populate_existing()
+        .order_by(KnowledgeDomain.sort_order)
+        .all()
+    )
 
 
 def get_enabled_domains(session: Session) -> list[KnowledgeDomain]:
+    """获取已启用领域（强制刷新）。"""
     return (
         session.query(KnowledgeDomain)
         .filter(KnowledgeDomain.is_enabled == True)
+        .populate_existing()
         .order_by(KnowledgeDomain.sort_order)
         .all()
     )
@@ -33,7 +41,7 @@ def get_domain_by_id(session: Session, domain_id: int) -> Optional[KnowledgeDoma
     return session.query(KnowledgeDomain).filter(KnowledgeDomain.id == domain_id).first()
 
 
-def create_domain(session: Session, name: str, description: str = "", keywords: str = "", icon: str = "📚") -> KnowledgeDomain:
+def create_domain(session: Session, name: str, description: str = "", keywords: str = "", icon: str = "") -> KnowledgeDomain:
     max_order = session.query(func.max(KnowledgeDomain.sort_order)).scalar() or 0
     domain = KnowledgeDomain(
         name=name, description=description, keywords=keywords,
@@ -100,11 +108,30 @@ def get_knowledge_items(session: Session, domain_id: int = None,
     if domain_id:
         q = q.filter(KnowledgeItem.domain_id == domain_id)
     if keyword:
-        like = f"%{keyword}%"
-        q = q.filter(
-            KnowledgeItem.title.like(like) | KnowledgeItem.summary.like(like)
-        )
+        q = q.filter(_knowledge_keyword_filter(keyword))
     return q.order_by(desc(KnowledgeItem.created_at)).offset(offset).limit(limit).all()
+
+
+def _knowledge_keyword_filter(keyword: str):
+    like = f"%{keyword}%"
+    return (
+        KnowledgeItem.title.like(like)
+        | KnowledgeItem.summary.like(like)
+        | KnowledgeItem.detail.like(like)
+    )
+
+
+def search_knowledge_items(session: Session, keyword: str, limit: int = 8) -> list[KnowledgeItem]:
+    """按关键词检索知识库（标题、摘要、详情）。"""
+    if not (keyword or "").strip():
+        return get_knowledge_items(session, limit=limit)
+    return (
+        session.query(KnowledgeItem)
+        .filter(_knowledge_keyword_filter(keyword.strip()))
+        .order_by(desc(KnowledgeItem.created_at))
+        .limit(limit)
+        .all()
+    )
 
 
 def get_knowledge_item_by_id(session: Session, item_id: int) -> Optional[KnowledgeItem]:
@@ -120,6 +147,15 @@ def update_knowledge_item(session: Session, item_id: int, **kwargs) -> Optional[
             setattr(item, k, v)
     session.commit()
     return item
+
+
+def delete_knowledge_item(session: Session, item_id: int) -> bool:
+    item = get_knowledge_item_by_id(session, item_id)
+    if not item:
+        return False
+    session.delete(item)
+    session.commit()
+    return True
 
 
 def get_knowledge_count(session: Session) -> int:
@@ -144,6 +180,19 @@ def create_push_history(session: Session, item_id: int) -> PushHistory:
     return entry
 
 
+def mark_push_clicked(session: Session, item_id: int):
+    """标记指定知识条目的最近一次推送为已点击。"""
+    entry = (
+        session.query(PushHistory)
+        .filter(PushHistory.knowledge_item_id == item_id)
+        .order_by(desc(PushHistory.pushed_at))
+        .first()
+    )
+    if entry and not entry.is_clicked:
+        entry.is_clicked = True
+        session.commit()
+
+
 def get_recent_push_history(session: Session, limit: int = 20) -> list[PushHistory]:
     return (
         session.query(PushHistory)
@@ -151,6 +200,27 @@ def get_recent_push_history(session: Session, limit: int = 20) -> list[PushHisto
         .limit(limit)
         .all()
     )
+
+
+def get_recent_push_history_with_titles(session: Session, limit: int = 10) -> list[dict]:
+    """获取最近推送记录并附带知识条目标题（单次 JOIN 查询，避免 N+1）。"""
+    rows = (
+        session.query(PushHistory, KnowledgeItem.title, KnowledgeItem.domain_name)
+        .outerjoin(KnowledgeItem, PushHistory.knowledge_item_id == KnowledgeItem.id)
+        .order_by(desc(PushHistory.pushed_at))
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": h.id,
+            "pushed_at": h.pushed_at.isoformat() if h.pushed_at else None,
+            "title": title or "(已删除)",
+            "domain_name": domain_name or "",
+            "is_clicked": h.is_clicked,
+        }
+        for h, title, domain_name in rows
+    ]
 
 
 # ── 用户设置 ──
