@@ -31,6 +31,7 @@ class MainWindow(QMainWindow):
         self._engine = db_engine
         self._settings_file = settings_file
         self._tray = None
+        self._tray_menu = None
         self._tray_notifier: TrayNotifier | None = None
         self._push_scheduler = None
         self._push_running = False

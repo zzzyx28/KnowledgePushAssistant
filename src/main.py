@@ -2,6 +2,7 @@
 
 import sys
 
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QStyle, QMessageBox
 from PySide6.QtGui import QIcon, QAction, QCursor
 
@@ -11,10 +12,48 @@ from .config import SETTINGS_PATH, resolve_tray_icon_path
 from .ui.main_window import MainWindow
 
 
+def _show_tray_menu(menu: QMenu) -> None:
+    """在光标处显示托盘菜单（exec 在 Win/mac 上比 popup 更可靠）。"""
+    pos = QCursor.pos()
+    if pos.x() == 0 and pos.y() == 0:
+        screen = QApplication.primaryScreen()
+        if screen:
+            geo = screen.availableGeometry()
+            pos = geo.bottomRight() - QPoint(200, 120)
+    menu.exec(pos)
+
+
+def _build_tray_menu(tray: QSystemTrayIcon, window: MainWindow, app: QApplication) -> QMenu:
+    """构建托盘右键菜单（父对象为 tray，避免被 GC）。"""
+    menu = QMenu(tray)
+    menu.setMinimumWidth(168)
+    menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+
+    show_action = QAction("打开主面板", menu)
+    show_action.triggered.connect(window.show_and_raise)
+    menu.addAction(show_action)
+
+    push_now_action = QAction("立即推送一条", menu)
+    push_now_action.triggered.connect(
+        lambda: window._on_push_requested(show_agent_panel=True)
+    )
+    menu.addAction(push_now_action)
+
+    menu.addSeparator()
+
+    quit_action = QAction("退出", menu)
+    quit_action.triggered.connect(app.quit)
+    menu.addAction(quit_action)
+
+    return menu
+
+
 def create_tray_icon(app: QApplication, window: MainWindow) -> QSystemTrayIcon | None:
     """创建系统托盘图标；不可用时返回 None。
 
-    macOS 左/右键均弹出菜单；Windows 右键弹出菜单、双击打开窗口。
+    交互约定：
+    - Windows：左键打开主窗口，右键弹出菜单
+    - macOS：单击弹出菜单（含「打开」「退出」），双击打开主窗口
     """
     if not QSystemTrayIcon.isSystemTrayAvailable():
         return None
@@ -28,52 +67,29 @@ def create_tray_icon(app: QApplication, window: MainWindow) -> QSystemTrayIcon |
     else:
         tray.setIcon(app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
 
-    # ---- 托盘菜单 ----
-    menu = QMenu()
-    menu.setMinimumWidth(160)
+    menu = _build_tray_menu(tray, window, app)
+    window._tray_menu = menu  # 防止菜单被回收
 
-    show_action = QAction("打开主面板")
-    show_action.triggered.connect(window.show_and_raise)
-    menu.addAction(show_action)
+    def on_activated(reason: QSystemTrayIcon.ActivationReason):
+        if reason == QSystemTrayIcon.ActivationReason.Context:
+            # Windows 右键（及部分 macOS 辅助点按）
+            _show_tray_menu(menu)
+        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            window.show_and_raise()
+        elif reason == QSystemTrayIcon.ActivationReason.Trigger:
+            if sys.platform == "win32":
+                # Windows 左键：打开主窗口
+                window.show_and_raise()
+            else:
+                # macOS 无独立右键信号时，单击弹出菜单
+                _show_tray_menu(menu)
 
-    push_now_action = QAction("立即推送一条")
-    push_now_action.triggered.connect(
-        lambda: window._on_push_requested(show_agent_panel=True)
-    )
-    menu.addAction(push_now_action)
+    tray.activated.connect(on_activated)
 
-    menu.addSeparator()
-
-    quit_action = QAction("退出")
-    quit_action.triggered.connect(app.quit)
-    menu.addAction(quit_action)
-
-    # ---- 点击行为（macOS / Windows 分开处理） ----
+    # Windows：勿同时使用 setContextMenu 与 activated，否则右键菜单常被吞掉。
+    # macOS：注册 contextMenu 供辅助点按走原生路径，单击仍由 Trigger 手动弹出。
     if sys.platform == "darwin":
-        # macOS: NSStatusBar 不区分左右键，setContextMenu 在部分版本有兼容问题。
-        # 统一通过 activated 信号手动弹出菜单。
-        def on_activated(reason: QSystemTrayIcon.ActivationReason):
-            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-                window.show_and_raise()
-            elif reason in (
-                QSystemTrayIcon.ActivationReason.Trigger,
-                QSystemTrayIcon.ActivationReason.Context,
-            ):
-                menu.popup(QCursor.pos())
-
-        tray.activated.connect(on_activated)
-    else:
-        # Windows: 右键出菜单（原生），左键/双击打开窗口
         tray.setContextMenu(menu)
-
-        def on_activated(reason: QSystemTrayIcon.ActivationReason):
-            if reason in (
-                QSystemTrayIcon.ActivationReason.DoubleClick,
-                QSystemTrayIcon.ActivationReason.Trigger,
-            ):
-                window.show_and_raise()
-
-        tray.activated.connect(on_activated)
 
     tray.show()
     return tray
