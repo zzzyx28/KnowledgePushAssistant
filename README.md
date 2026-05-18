@@ -5,7 +5,9 @@
 
 
 
-*截图占位 — 运行应用后截取仪表盘、知识详情、设置页面放入 assets/screenshots/*
+![仪表盘](assets/screenshots/picture1.png)
+![知识详情](assets/screenshots/picture2.png)
+![设置页面](assets/screenshots/picture3.png)
 
 ---
 
