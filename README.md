@@ -5,9 +5,13 @@
 
 
 
-![仪表盘](assets/screenshots/picture1.png)
-![知识详情](assets/screenshots/picture2.png)
-![设置页面](assets/screenshots/picture3.png)
+<p align="center">
+  <img src="assets/screenshots/picture1.png" alt="仪表盘" width="30%" />
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/picture2.png" alt="知识详情" width="30%" />
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/picture3.png" alt="设置页面" width="30%" />
+</p>
 
 ---
 
