@@ -28,8 +28,9 @@ def create_tray_icon(app: QApplication, window: MainWindow) -> QSystemTrayIcon |
     else:
         tray.setIcon(app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
 
-    # ---- 右键菜单 ----
+    # ---- 托盘菜单 ----
     menu = QMenu()
+    menu.setMinimumWidth(160)
 
     show_action = QAction("打开主面板")
     show_action.triggered.connect(window.show_and_raise)
@@ -47,24 +48,33 @@ def create_tray_icon(app: QApplication, window: MainWindow) -> QSystemTrayIcon |
     quit_action.triggered.connect(app.quit)
     menu.addAction(quit_action)
 
-    tray.setContextMenu(menu)
-
-    # ---- 点击行为（跨平台适配） ----
-    def on_activated(reason: QSystemTrayIcon.ActivationReason):
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            window.show_and_raise()
-        elif reason == QSystemTrayIcon.ActivationReason.Context:
-            # macOS 右键 → 弹出菜单（setContextMenu 已处理常规情况，
-            # 这里兜底处理某些 macOS 版本不自动弹出菜单的问题）
-            menu.popup(QCursor.pos())
-        elif reason == QSystemTrayIcon.ActivationReason.Trigger:
-            # macOS 左键也弹出菜单（符合 macOS 菜单栏图标习惯）
-            if sys.platform == "darwin":
+    # ---- 点击行为（macOS / Windows 分开处理） ----
+    if sys.platform == "darwin":
+        # macOS: NSStatusBar 不区分左右键，setContextMenu 在部分版本有兼容问题。
+        # 统一通过 activated 信号手动弹出菜单。
+        def on_activated(reason: QSystemTrayIcon.ActivationReason):
+            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+                window.show_and_raise()
+            elif reason in (
+                QSystemTrayIcon.ActivationReason.Trigger,
+                QSystemTrayIcon.ActivationReason.Context,
+            ):
                 menu.popup(QCursor.pos())
-            else:
+
+        tray.activated.connect(on_activated)
+    else:
+        # Windows: 右键出菜单（原生），左键/双击打开窗口
+        tray.setContextMenu(menu)
+
+        def on_activated(reason: QSystemTrayIcon.ActivationReason):
+            if reason in (
+                QSystemTrayIcon.ActivationReason.DoubleClick,
+                QSystemTrayIcon.ActivationReason.Trigger,
+            ):
                 window.show_and_raise()
 
-    tray.activated.connect(on_activated)
+        tray.activated.connect(on_activated)
+
     tray.show()
     return tray
 
