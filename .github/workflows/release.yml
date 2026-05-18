@@ -114,16 +114,29 @@ jobs:
           echo "=== Files to upload ==="
           find macOS-DMG Windows-exe -type f 2>/dev/null || true
 
-          # Create the release
-          RELEASE_JSON=$(curl -sS -X POST \
+          # Create release via API (write response + HTTP status to temp files for safe parsing)
+          HTTP_CODE=$(mktemp)
+          RESP_BODY=$(mktemp)
+
+          curl -sS -o "${RESP_BODY}" -w "%{http_code}" -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/releases" \
-            -d "$(printf '{"tag_name":"%s","draft":true,"generate_release_notes":true}' "${{ github.ref_name }}")")
+            -d "$(printf '{"tag_name":"%s","draft":true,"generate_release_notes":true}' "${{ github.ref_name }}")" \
+            > "${HTTP_CODE}"
 
-          echo "Release response: ${RELEASE_JSON}"
+          STATUS=$(cat "${HTTP_CODE}")
+          echo "HTTP status: ${STATUS}"
+          echo "Response:"
+          cat "${RESP_BODY}"
 
-          RELEASE_ID=$(echo "${RELEASE_JSON}" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          if [ "${STATUS}" != "201" ]; then
+            echo "::error::Failed to create release (HTTP ${STATUS})"
+            echo "Make sure 'Workflow permissions' in repo Settings > Actions > General is set to 'Read and write permissions'"
+            exit 1
+          fi
+
+          RELEASE_ID=$(python3 -c "import json; print(json.load(open('${RESP_BODY}'))['id'])")
           echo "Release ID: ${RELEASE_ID}"
 
           # Upload each asset
@@ -131,7 +144,7 @@ jobs:
             [ -f "$f" ] || continue
             fname=$(basename "$f")
             echo "Uploading: ${fname} ..."
-            curl -sS -X POST \
+            curl -sS -f -X POST \
               -H "Authorization: Bearer ${GH_TOKEN}" \
               -H "Content-Type: application/octet-stream" \
               "https://uploads.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=${fname}" \
@@ -139,5 +152,5 @@ jobs:
             echo "  done."
           done
 
-          echo "=== Release created ==="
-          echo "URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          echo "=== Release created (draft) ==="
+          echo "View at: https://github.com/${{ github.repository }}/releases"
