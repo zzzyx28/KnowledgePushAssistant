@@ -3,7 +3,7 @@
 import sys
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QStyle, QMessageBox
-from PySide6.QtGui import QIcon, QAction
+from PySide6.QtGui import QIcon, QAction, QCursor
 
 from .storage.migrations import init_database
 from .scheduler.push_scheduler import PushScheduler
@@ -12,7 +12,10 @@ from .ui.main_window import MainWindow
 
 
 def create_tray_icon(app: QApplication, window: MainWindow) -> QSystemTrayIcon | None:
-    """创建系统托盘图标；不可用时返回 None。"""
+    """创建系统托盘图标；不可用时返回 None。
+
+    macOS 左/右键均弹出菜单；Windows 右键弹出菜单、双击打开窗口。
+    """
     if not QSystemTrayIcon.isSystemTrayAvailable():
         return None
 
@@ -25,6 +28,7 @@ def create_tray_icon(app: QApplication, window: MainWindow) -> QSystemTrayIcon |
     else:
         tray.setIcon(app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
 
+    # ---- 右键菜单 ----
     menu = QMenu()
 
     show_action = QAction("打开主面板")
@@ -44,11 +48,23 @@ def create_tray_icon(app: QApplication, window: MainWindow) -> QSystemTrayIcon |
     menu.addAction(quit_action)
 
     tray.setContextMenu(menu)
-    tray.activated.connect(
-        lambda reason: window.show_and_raise()
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick
-        else None
-    )
+
+    # ---- 点击行为（跨平台适配） ----
+    def on_activated(reason: QSystemTrayIcon.ActivationReason):
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            window.show_and_raise()
+        elif reason == QSystemTrayIcon.ActivationReason.Context:
+            # macOS 右键 → 弹出菜单（setContextMenu 已处理常规情况，
+            # 这里兜底处理某些 macOS 版本不自动弹出菜单的问题）
+            menu.popup(QCursor.pos())
+        elif reason == QSystemTrayIcon.ActivationReason.Trigger:
+            # macOS 左键也弹出菜单（符合 macOS 菜单栏图标习惯）
+            if sys.platform == "darwin":
+                menu.popup(QCursor.pos())
+            else:
+                window.show_and_raise()
+
+    tray.activated.connect(on_activated)
     tray.show()
     return tray
 
