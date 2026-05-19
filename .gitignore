@@ -1,23 +1,8 @@
-# ── Python ──
-__pycache__/
-*.py[cod]
-*.egg-info/
-*.egg
-dist/
-build/
-*.spec
-*.manifest
-*.exe
-*.dmg
-*.app
-*.pkg
-
-# ── Virtual environments ──
-venv/
-.venv/
-env/
-.env/
-pip-wheel-metadata/
+# ── JavaScript / Tauri ──
+node_modules/
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
 
 # ── IDE / Editor ──
 .vscode/

@@ -14,203 +14,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
+          node-version: '20'
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt pyinstaller
-          # Remove full PySide6 if accidentally installed, keep Essentials only
-          pip uninstall -y PySide6 2>/dev/null || true
+          cd desktop
+          npm ci
 
-      - name: Build .app bundle
-        run: |
-          pyinstaller \
-            --name="KnowledgePushAssistant" \
-            --windowed \
-            --onedir \
-            --icon=assets/icon.icns \
-            --add-data="src:src" \
-            --add-data="assets:assets" \
-            --hidden-import="sqlalchemy.ext.declarative" \
-            --osx-bundle-identifier="com.knowledgepush.assistant" \
-            --clean \
-            --noconfirm \
-            --exclude-module="PySide6.QtWebEngine" \
-            --exclude-module="PySide6.QtWebEngineCore" \
-            --exclude-module="PySide6.QtWebEngineWidgets" \
-            --exclude-module="PySide6.QtWebChannel" \
-            --exclude-module="PySide6.QtQuick" \
-            --exclude-module="PySide6.QtQuickWidgets" \
-            --exclude-module="PySide6.QtQml" \
-            --exclude-module="PySide6.QtQmlModels" \
-            --exclude-module="PySide6.QtMultimedia" \
-            --exclude-module="PySide6.QtMultimediaWidgets" \
-            --exclude-module="PySide6.Qt3DAnimation" \
-            --exclude-module="PySide6.Qt3DCore" \
-            --exclude-module="PySide6.Qt3DExtras" \
-            --exclude-module="PySide6.Qt3DInput" \
-            --exclude-module="PySide6.Qt3DLogic" \
-            --exclude-module="PySide6.Qt3DRender" \
-            --exclude-module="PySide6.QtCharts" \
-            --exclude-module="PySide6.QtDataVisualization" \
-            --exclude-module="PySide6.QtLocation" \
-            --exclude-module="PySide6.QtPositioning" \
-            --exclude-module="PySide6.QtSensors" \
-            --exclude-module="PySide6.QtTextToSpeech" \
-            --exclude-module="PySide6.QtNfc" \
-            --exclude-module="PySide6.QtBluetooth" \
-            --exclude-module="PySide6.QtRemoteObjects" \
-            --exclude-module="PySide6.QtDesigner" \
-            --exclude-module="PySide6.QtSerialPort" \
-            run.py
-
-      - name: Create DMG
-        run: |
-          APP_PATH="dist/KnowledgePushAssistant.app"
-          DMG_NAME="KnowledgePushAssistant-${GITHUB_REF_NAME#v}.dmg"
-          TMP_DMG="build/dmg_layout"
-          mkdir -p "${TMP_DMG}"
-          cp -R "${APP_PATH}" "${TMP_DMG}/"
-          ln -s /Applications "${TMP_DMG}/Applications"
-          hdiutil create \
-            -volname "KnowledgePushAssistant" \
-            -srcfolder "${TMP_DMG}" \
-            -ov -format UDZO \
-            "dist/${DMG_NAME}"
-          echo "dmg_name=${DMG_NAME}" >> "${GITHUB_OUTPUT}"
-        id: dmg
-
-      - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+      - name: Build Tauri app (macOS)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
-          name: macOS-DMG
-          path: dist/${{ steps.dmg.outputs.dmg_name }}
+          projectPath: desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Knowledge Push Assistant ${{ github.ref_name }}"
+          releaseBody: "See the assets to download this version and install."
+          releaseDraft: true
+          prerelease: false
 
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
+          node-version: '20'
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt pyinstaller
-          # Remove full PySide6 if accidentally installed, keep Essentials only
-          pip uninstall -y PySide6 2>$null || echo "PySide6 not installed (OK)"
+          cd desktop
+          npm ci
 
-      - name: Build single exe
-        run: |
-          pyinstaller `
-            --name="KnowledgePushAssistant" `
-            --windowed `
-            --onefile `
-            --icon=assets/icon.ico `
-            --add-data="src;src" `
-            --add-data="assets;assets" `
-            --hidden-import="sqlalchemy.ext.declarative" `
-            --clean `
-            --noconfirm `
-            --exclude-module="PySide6.QtWebEngine" `
-            --exclude-module="PySide6.QtWebEngineCore" `
-            --exclude-module="PySide6.QtWebEngineWidgets" `
-            --exclude-module="PySide6.QtWebChannel" `
-            --exclude-module="PySide6.QtQuick" `
-            --exclude-module="PySide6.QtQuickWidgets" `
-            --exclude-module="PySide6.QtQml" `
-            --exclude-module="PySide6.QtQmlModels" `
-            --exclude-module="PySide6.QtMultimedia" `
-            --exclude-module="PySide6.QtMultimediaWidgets" `
-            --exclude-module="PySide6.Qt3DAnimation" `
-            --exclude-module="PySide6.Qt3DCore" `
-            --exclude-module="PySide6.Qt3DExtras" `
-            --exclude-module="PySide6.Qt3DInput" `
-            --exclude-module="PySide6.Qt3DLogic" `
-            --exclude-module="PySide6.Qt3DRender" `
-            --exclude-module="PySide6.QtCharts" `
-            --exclude-module="PySide6.QtDataVisualization" `
-            --exclude-module="PySide6.QtLocation" `
-            --exclude-module="PySide6.QtPositioning" `
-            --exclude-module="PySide6.QtSensors" `
-            --exclude-module="PySide6.QtTextToSpeech" `
-            --exclude-module="PySide6.QtNfc" `
-            --exclude-module="PySide6.QtBluetooth" `
-            --exclude-module="PySide6.QtRemoteObjects" `
-            --exclude-module="PySide6.QtDesigner" `
-            --exclude-module="PySide6.QtSerialPort" `
-            run.py
-
-      - name: Rename with version
-        run: |
-          $ver = "${{ github.ref_name }}" -replace '^v', ''
-          $src = "dist/KnowledgePushAssistant.exe"
-          $dst = "dist/KnowledgePushAssistant-${ver}.exe"
-          Rename-Item -Path $src -NewName "KnowledgePushAssistant-${ver}.exe"
-          echo "exe_name=KnowledgePushAssistant-${ver}.exe" >> $env:GITHUB_OUTPUT
-        id: exe
-
-      - name: Upload exe artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Windows-exe
-          path: dist/${{ steps.exe.outputs.exe_name }}
-
-  release:
-    needs: [build-macos, build-windows]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-
-      - name: Create GitHub Release
+      - name: Build Tauri app (Windows)
+        uses: tauri-apps/tauri-action@v0
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          echo "=== Files to upload ==="
-          find macOS-DMG Windows-exe -type f 2>/dev/null || true
-
-          # Create release via API (write response + HTTP status to temp files for safe parsing)
-          HTTP_CODE=$(mktemp)
-          RESP_BODY=$(mktemp)
-
-          curl -sS -o "${RESP_BODY}" -w "%{http_code}" -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases" \
-            -d "$(printf '{"tag_name":"%s","draft":true,"generate_release_notes":true}' "${{ github.ref_name }}")" \
-            > "${HTTP_CODE}"
-
-          STATUS=$(cat "${HTTP_CODE}")
-          echo "HTTP status: ${STATUS}"
-          echo "Response:"
-          cat "${RESP_BODY}"
-
-          if [ "${STATUS}" != "201" ]; then
-            echo "::error::Failed to create release (HTTP ${STATUS})"
-            echo "Make sure 'Workflow permissions' in repo Settings > Actions > General is set to 'Read and write permissions'"
-            exit 1
-          fi
-
-          RELEASE_ID=$(python3 -c "import json; print(json.load(open('${RESP_BODY}'))['id'])")
-          echo "Release ID: ${RELEASE_ID}"
-
-          # Upload each asset
-          for f in macOS-DMG/* Windows-exe/*; do
-            [ -f "$f" ] || continue
-            fname=$(basename "$f")
-            echo "Uploading: ${fname} ..."
-            curl -sS -f -X POST \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Content-Type: application/octet-stream" \
-              "https://uploads.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=${fname}" \
-              --data-binary "@${f}"
-            echo "  done."
-          done
-
-          echo "=== Release created (draft) ==="
-          echo "View at: https://github.com/${{ github.repository }}/releases"
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          projectPath: desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Knowledge Push Assistant ${{ github.ref_name }}"
+          releaseBody: "See the assets to download this version and install."
+          releaseDraft: true
+          prerelease: false

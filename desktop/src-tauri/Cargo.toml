@@ -1,0 +1,20 @@
+[package]
+name = "knowledge-push-assistant-desktop"
+version = "0.1.0"
+description = "Knowledge Push Assistant desktop app"
+authors = ["Knowledge Push Assistant Contributors"]
+edition = "2021"
+
+[lib]
+name = "knowledge_push_assistant_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = ["tray-icon"] }
+tauri-plugin-notification = "2.0.0"
+tauri-plugin-sql = { version = "2.0.0", features = ["sqlite"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
