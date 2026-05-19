@@ -35,11 +35,15 @@ npm run tauri build
 # ── Rename artifacts ──
 BUNDLE_DIR="src-tauri/target/release/bundle"
 ARCH=$(uname -m)
+# Tauri uses aarch64, uname -m gives arm64 on Apple Silicon
+TAURI_ARCH="$ARCH"
+[ "$ARCH" = "arm64" ] && TAURI_ARCH="aarch64"
+[ "$ARCH" = "x86_64" ] && TAURI_ARCH="x64"
 
 case "$(uname -s)" in
   Darwin)
     OS="macos"
-    DMG_SRC="$BUNDLE_DIR/dmg/Knowledge Push Assistant_${VERSION}_${ARCH}.dmg"
+    DMG_SRC="$BUNDLE_DIR/dmg/Knowledge Push Assistant_${VERSION}_${TAURI_ARCH}.dmg"
     DMG_DST="$SCRIPT_DIR/../dist/KPA-v${VERSION}-macos-${ARCH}.dmg"
     mkdir -p "$SCRIPT_DIR/../dist"
     if [ -f "$DMG_SRC" ]; then
