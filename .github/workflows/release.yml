@@ -9,34 +9,52 @@ permissions:
   contents: write
 
 jobs:
+  # ── macOS ──
   build-macos:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          targets: ${{ matrix.arch == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}
 
       - name: Install dependencies
-        run: |
-          cd desktop
-          npm ci
+        run: cd desktop && npm ci
 
-      - name: Build Tauri app (macOS)
+      - name: Build (macOS)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
-          releaseName: "Knowledge Push Assistant ${{ github.ref_name }}"
-          releaseBody: "See the assets to download this version and install."
-          releaseDraft: true
-          prerelease: false
+          releaseName: "KPA ${{ github.ref_name }}"
+          releaseBody: |
+            ## KPA ${{ github.ref_name }}
 
+            AI Agent 驱动的桌面端知识推送应用 · Tauri 2 + React 18 + TypeScript
+
+            ### 下载
+
+            - **macOS Apple Silicon**: `KPA-${{ github.ref_name }}-macos-arm64.dmg`
+            - **macOS Intel**: `KPA-${{ github.ref_name }}-macos-x64.dmg`
+            - **Windows**: `KPA-${{ github.ref_name }}-windows-x64.exe`
+            - **Linux**: `KPA-${{ github.ref_name }}-linux-x64.deb` / `.AppImage`
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.arch == 'arm64' && '--target aarch64-apple-darwin' || '' }}
+
+  # ── Windows ──
   build-windows:
     runs-on: windows-latest
     steps:
@@ -45,22 +63,54 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Install dependencies
-        run: |
-          cd desktop
-          npm ci
+        run: cd desktop && npm ci
 
-      - name: Build Tauri app (Windows)
+      - name: Build (Windows)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
-          releaseName: "Knowledge Push Assistant ${{ github.ref_name }}"
-          releaseBody: "See the assets to download this version and install."
-          releaseDraft: true
+          releaseName: "KPA ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false
+
+  # ── Linux ──
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
+
+      - name: Install dependencies
+        run: cd desktop && npm ci
+
+      - name: Build (Linux)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          projectPath: desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "KPA ${{ github.ref_name }}"
+          releaseDraft: false
           prerelease: false
