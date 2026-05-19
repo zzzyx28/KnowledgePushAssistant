@@ -64,3 +64,17 @@ jobs:
           releaseName: "KPA ${{ github.ref_name }}"
           releaseDraft: false
           prerelease: false
+
+      - name: Create portable zip
+        shell: pwsh
+        run: |
+          $binary = "desktop/src-tauri/target/release/knowledge-push-assistant-desktop.exe"
+          $zipName = "KPA-${{ github.ref_name }}-windows-portable.zip"
+          Compress-Archive -Path $binary -DestinationPath $zipName
+          echo "portable_zip=$zipName" >> $env:GITHUB_ENV
+
+      - name: Upload portable zip to release
+        run: |
+          gh release upload ${{ github.ref_name }} "${{ env.portable_zip }}" --clobber
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

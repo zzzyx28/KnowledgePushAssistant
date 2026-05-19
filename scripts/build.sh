@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Build Knowledge Push Assistant for current platform.
-# Outputs: macOS .dmg or Windows .exe/.msi
+# Outputs: macOS .dmg or Windows portable .exe + installer
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")/desktop"
@@ -46,10 +46,13 @@ case "$(uname -s)" in
     fi
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    MSI_SRC=$(ls "$BUNDLE_DIR/msi/"*.msi 2>/dev/null | head -1)
-    EXE_SRC=$(ls "$BUNDLE_DIR/nsis/"*.exe 2>/dev/null | head -1)
-    [ -f "$MSI_SRC" ] && cp "$MSI_SRC" "$DIST_DIR/KPA-v${VERSION}-windows-${ARCH}.msi" && echo "Done: .msi"
-    [ -f "$EXE_SRC" ] && cp "$EXE_SRC" "$DIST_DIR/KPA-v${VERSION}-windows-${ARCH}.exe" && echo "Done: .exe"
+    EXE_SRC="src-tauri/target/release/knowledge-push-assistant-desktop.exe"
+    if [ -f "$EXE_SRC" ]; then
+      cp "$EXE_SRC" "$DIST_DIR/KPA-v${VERSION}-windows-portable.exe"
+      echo "Done: $DIST_DIR/KPA-v${VERSION}-windows-portable.exe"
+    fi
+    NSIS_SRC=$(ls "$BUNDLE_DIR/nsis/"*.exe 2>/dev/null | head -1)
+    [ -f "$NSIS_SRC" ] && cp "$NSIS_SRC" "$DIST_DIR/KPA-v${VERSION}-windows-${ARCH}-installer.exe" && echo "Done: installer .exe"
     ;;
   *)
     echo "Unsupported platform. CI builds macOS (.dmg) and Windows (.exe)."

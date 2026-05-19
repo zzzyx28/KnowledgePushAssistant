@@ -183,7 +183,7 @@ npm run tauri build
 构建产物在 `desktop/src-tauri/target/release/bundle/` 下：
 
 - **macOS** → `.dmg`
-- **Windows** → `.exe` + `.msi`
+- **Windows** → portable `.exe` + NSIS installer
 
 CI 通过 GitHub Actions 自动构建，推送 `v*` 标签时触发。
 
