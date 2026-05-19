@@ -65,6 +65,26 @@ export function StopIcon() {
   );
 }
 
+export function ThumbUpIcon({ filled = false }: { filled?: boolean }) {
+  return (
+    <IconBase>
+      {filled ? (
+        <path
+          d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3m7-2V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14Z"
+          fill="currentColor"
+        />
+      ) : (
+        <path
+          d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3m7-2V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14ZM5 13v7m9-14.5V5a1 1 0 0 0-1-1l-3.5 8.5V20h7.28a1 1 0 0 0 1-.85l1-6.5a1 1 0 0 0-1-1.15H14Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        />
+      )}
+    </IconBase>
+  );
+}
+
 export function MoonIcon() {
   return (
     <IconBase>

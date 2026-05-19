@@ -17,6 +17,9 @@ async function initDatabase(): Promise<Database> {
   const database = await Database.load("sqlite:kpa.db");
   await initSchema(database);
   await seedDefaults(database);
+  await database.execute(
+    "DELETE FROM push_history WHERE knowledge_item_id NOT IN (SELECT id FROM knowledge_items)"
+  );
   return database;
 }
 

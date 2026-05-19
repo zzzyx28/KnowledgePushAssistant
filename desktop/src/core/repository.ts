@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import { DEFAULT_SETTINGS } from "./defaults";
+import { DEFAULT_DOMAINS, DEFAULT_SETTINGS } from "./defaults";
 import type { AgentLog, AppSettings, DashboardStats, Domain, DomainStat, KnowledgeItem } from "./types";
 
 export async function listDomains(): Promise<Domain[]> {
@@ -52,6 +52,24 @@ export async function getKnowledgeById(itemId: number): Promise<KnowledgeItem | 
   return rows[0] ?? null;
 }
 
+export async function toggleFavorite(itemId: number): Promise<{ is_favorited: boolean }> {
+  const db = await getDb();
+  const rows = await db.select<{ is_favorited: number }[]>(
+    "SELECT is_favorited FROM knowledge_items WHERE id = ? LIMIT 1",
+    [itemId]
+  );
+  if (rows.length === 0) {
+    return { is_favorited: false };
+  }
+  const next = rows[0].is_favorited === 1 ? 0 : 1;
+  const newRating = next === 1 ? 5 : null;
+  await db.execute(
+    "UPDATE knowledge_items SET is_favorited = ?, rating = ? WHERE id = ?",
+    [next, newRating, itemId]
+  );
+  return { is_favorited: next === 1 };
+}
+
 export async function deleteKnowledgeItem(itemId: number): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM push_history WHERE knowledge_item_id = ?", [itemId]);
@@ -81,7 +99,7 @@ export async function createKnowledgeCard(input: {
   if (exists.length > 0) {
     return { status: "duplicate" };
   }
-  await db.execute(
+  const result = await db.execute(
     "INSERT INTO knowledge_items (domain_id, domain_name, title, summary, detail, source_url, source_title, trust_score, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
       input.domainId,
@@ -95,8 +113,7 @@ export async function createKnowledgeCard(input: {
       hash
     ]
   );
-  const item = await db.select<{ id: number }[]>("SELECT last_insert_rowid() as id");
-  const itemId = item[0]?.id;
+  const itemId = result.lastInsertId;
   if (itemId) {
     await db.execute("INSERT INTO push_history (knowledge_item_id) VALUES (?)", [itemId]);
     return { status: "created", itemId };
@@ -177,14 +194,14 @@ export async function getRecentAgentLogs(limit = 50): Promise<AgentLog[]> {
 }
 
 export async function getRecentPushHistory(
-  limit = 8
-): Promise<Array<{ id: number; knowledge_item_id: number | null; pushed_at: string; title: string; domain_name: string }>> {
+  limit = 15
+): Promise<Array<{ id: number; knowledge_item_id: number; pushed_at: string; title: string; domain_name: string; summary: string }>> {
   const db = await getDb();
-  return db.select<Array<{ id: number; knowledge_item_id: number | null; pushed_at: string; title: string; domain_name: string }>>(
-    `SELECT ph.id, ph.knowledge_item_id, ph.pushed_at, COALESCE(ki.title, '(已删除)') as title, COALESCE(ki.domain_name, '') as domain_name
+  return db.select<Array<{ id: number; knowledge_item_id: number; pushed_at: string; title: string; domain_name: string; summary: string }>>(
+    `SELECT ph.id, ph.knowledge_item_id, ph.pushed_at, ki.title, ki.domain_name, ki.summary
      FROM push_history ph
-     LEFT JOIN knowledge_items ki ON ki.id = ph.knowledge_item_id
-     ORDER BY ph.id DESC
+     INNER JOIN knowledge_items ki ON ki.id = ph.knowledge_item_id
+     ORDER BY ph.pushed_at DESC
      LIMIT ?`,
     [limit]
   );
@@ -194,13 +211,55 @@ export async function getDomainStats(): Promise<DomainStat[]> {
   const db = await getDb();
   return db.select<DomainStat[]>(
     `SELECT
-      domain_id,
-      COALESCE(domain_name, '') as domain_name,
+      ki.domain_id,
+      COALESCE(ki.domain_name, '') as domain_name,
       COUNT(*) as count,
-      COALESCE(ROUND(AVG(rating), 1), 0) as avg_rating
-    FROM knowledge_items
-    GROUP BY domain_id, domain_name
-    ORDER BY count DESC`
+      COALESCE(ROUND(AVG(ki.rating), 1), 0) as avg_rating,
+      MAX(ph.pushed_at) as last_push_at
+    FROM knowledge_items ki
+    LEFT JOIN push_history ph ON ph.knowledge_item_id = ki.id
+    GROUP BY ki.domain_id, ki.domain_name
+    ORDER BY last_push_at ASC NULLS FIRST`
+  );
+}
+
+export async function getPushSummary(): Promise<
+  Array<{
+    domain_id: number | null;
+    domain_name: string;
+    total_pushes: number;
+    last_push_at: string | null;
+    last_title: string | null;
+    hours_since_last: number | null;
+  }>
+> {
+  const db = await getDb();
+  return db.select<
+    Array<{
+      domain_id: number | null;
+      domain_name: string;
+      total_pushes: number;
+      last_push_at: string | null;
+      last_title: string | null;
+      hours_since_last: number | null;
+    }>
+  >(
+    `SELECT
+       d.id as domain_id,
+       d.name as domain_name,
+       COUNT(ph.id) as total_pushes,
+       MAX(ph.pushed_at) as last_push_at,
+       (SELECT ki2.title FROM push_history ph2
+        INNER JOIN knowledge_items ki2 ON ki2.id = ph2.knowledge_item_id
+        WHERE ki2.domain_id = d.id
+        ORDER BY ph2.id DESC LIMIT 1) as last_title,
+       CAST(ROUND((JULIANDAY('now') - JULIANDAY(MAX(ph.pushed_at))) * 24) AS INTEGER) as hours_since_last
+     FROM knowledge_domains d
+     LEFT JOIN knowledge_items ki ON ki.domain_id = d.id
+     LEFT JOIN push_history ph ON ph.knowledge_item_id = ki.id
+     WHERE d.is_enabled = 1
+     GROUP BY d.id, d.name
+     ORDER BY hours_since_last DESC NULLS FIRST`
   );
 }
 
@@ -220,6 +279,37 @@ export async function getUserFeedback(
     LIMIT ?`,
     [limit]
   );
+}
+
+export async function cleanOrphanedPushHistory(): Promise<number> {
+  const db = await getDb();
+  const result = await db.execute(
+    "DELETE FROM push_history WHERE knowledge_item_id NOT IN (SELECT id FROM knowledge_items)"
+  );
+  return result.rowsAffected;
+}
+
+export async function resetAllData(): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM push_history");
+  await db.execute("DELETE FROM knowledge_items");
+  await db.execute("DELETE FROM agent_execution_logs");
+  await db.execute(
+    "DELETE FROM knowledge_domains WHERE name NOT IN (?, ?)",
+    [DEFAULT_DOMAINS[0].name, DEFAULT_DOMAINS[1].name]
+  );
+  for (const d of DEFAULT_DOMAINS) {
+    const exists = await db.select<{ count: number }[]>(
+      "SELECT COUNT(*) as count FROM knowledge_domains WHERE name = ?",
+      [d.name]
+    );
+    if (exists[0]?.count === 0) {
+      await db.execute(
+        "INSERT INTO knowledge_domains (name, description, keywords, sort_order, is_enabled) VALUES (?, ?, ?, ?, 1)",
+        [d.name, d.description, d.keywords, DEFAULT_DOMAINS.indexOf(d)]
+      );
+    }
+  }
 }
 
 async function sha256(raw: string): Promise<string> {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { AppSettings } from "../core/types";
 
 interface SettingsProps {
@@ -5,9 +6,13 @@ interface SettingsProps {
   onChange: (v: AppSettings) => void;
   onSave: () => void;
   saving: boolean;
+  onReset: () => void;
+  resetting: boolean;
 }
 
-export default function Settings({ settings, onChange, onSave, saving }: SettingsProps) {
+export default function Settings({ settings, onChange, onSave, saving, onReset, resetting }: SettingsProps) {
+  const [confirmReset, setConfirmReset] = useState(false);
+
   return (
     <section className="panel settings-panel">
       <h3>设置中心</h3>
@@ -109,6 +114,37 @@ export default function Settings({ settings, onChange, onSave, saving }: Setting
           </button>
         </div>
       </form>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-danger-zone">
+        <h4>数据管理</h4>
+        <p className="text-muted">
+          初始化将清除所有知识点、推送历史和用户新增的领域，保留默认领域（计算机基础、人工智能）。
+        </p>
+        {confirmReset ? (
+          <div className="confirm-row">
+            <button type="button" className="ghost" onClick={() => setConfirmReset(false)}>
+              取消
+            </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={resetting}
+              onClick={() => {
+                onReset();
+                setConfirmReset(false);
+              }}
+            >
+              {resetting ? "初始化中..." : "确认初始化"}
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="danger" onClick={() => setConfirmReset(true)}>
+            初始化数据
+          </button>
+        )}
+      </div>
     </section>
   );
 }

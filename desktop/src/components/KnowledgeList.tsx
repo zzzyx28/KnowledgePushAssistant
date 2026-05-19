@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { KnowledgeItem } from "../core/types";
+import { ThumbUpIcon } from "./icons";
 
 interface KnowledgeListProps {
   knowledge: KnowledgeItem[];
@@ -7,6 +8,7 @@ interface KnowledgeListProps {
   onSearchChange: (value: string) => void;
   onSelectItem: (item: KnowledgeItem) => void;
   onDeleteItem: (itemId: number) => void;
+  onToggleFavorite: (itemId: number) => void;
 }
 
 export default function KnowledgeList({
@@ -14,7 +16,8 @@ export default function KnowledgeList({
   searchInput,
   onSearchChange,
   onSelectItem,
-  onDeleteItem
+  onDeleteItem,
+  onToggleFavorite
 }: KnowledgeListProps) {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
@@ -43,6 +46,18 @@ export default function KnowledgeList({
             </header>
             <p>{item.summary}</p>
             <div className="card-actions">
+              <button
+                type="button"
+                className={`ghost like-btn${item.is_favorited === 1 ? " is-liked" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleFavorite(item.id);
+                }}
+                aria-label={item.is_favorited === 1 ? "取消点赞" : "点赞"}
+                title={item.is_favorited === 1 ? "已点赞，点击取消" : "点赞表示内容有用"}
+              >
+                <ThumbUpIcon filled={item.is_favorited === 1} />
+              </button>
               <button
                 type="button"
                 className="ghost"

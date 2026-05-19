@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 
 import { askKnowledgeQuestion, type AskMessage } from "../core/agent/ask";
 import type { AppSettings, KnowledgeItem } from "../core/types";
+import { ThumbUpIcon } from "./icons";
 
 const ASK_HEIGHT_KEY = "kpa-ask-panel-height";
 const DEFAULT_ASK_HEIGHT = 300;
@@ -22,6 +23,7 @@ interface DetailOverlayProps {
   loading?: boolean;
   onClose: () => void;
   onExited: () => void;
+  onToggleFavorite: (itemId: number) => void;
 }
 
 export default function DetailOverlay({
@@ -30,7 +32,8 @@ export default function DetailOverlay({
   settings,
   loading = false,
   onClose,
-  onExited
+  onExited,
+  onToggleFavorite
 }: DetailOverlayProps) {
   const [askExpanded, setAskExpanded] = useState(false);
   const [messages, setMessages] = useState<AskMessage[]>([]);
@@ -151,9 +154,22 @@ export default function DetailOverlay({
             <p className="detail-bar-title">知识详情</p>
             <h3>{item?.title ?? "加载中…"}</h3>
           </div>
-          <button type="button" className="primary" onClick={onClose}>
-            完成
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {item && (
+              <button
+                type="button"
+                className={`ghost like-btn${item.is_favorited === 1 ? " is-liked" : ""}`}
+                onClick={() => onToggleFavorite(item.id)}
+                aria-label={item.is_favorited === 1 ? "取消点赞" : "点赞"}
+                title={item.is_favorited === 1 ? "已点赞，点击取消" : "点赞表示内容有用"}
+              >
+                <ThumbUpIcon filled={item.is_favorited === 1} />
+              </button>
+            )}
+            <button type="button" className="primary" onClick={onClose}>
+              完成
+            </button>
+          </div>
         </header>
 
         <div ref={bodyRef} className={`detail-body${askExpanded ? " ask-expanded" : ""}`}>

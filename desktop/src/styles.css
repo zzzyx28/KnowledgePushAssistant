@@ -703,6 +703,36 @@ button:disabled {
   resize: vertical;
 }
 
+.settings-divider {
+  border: 0;
+  border-top: 1px solid var(--border-panel);
+  margin: 24px 0 20px;
+}
+
+.settings-danger-zone h4 {
+  margin: 0 0 4px;
+  color: var(--text-body);
+  font-size: 15px;
+}
+.settings-danger-zone .text-muted {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.settings-danger-zone .confirm-row {
+  display: flex;
+  gap: 8px;
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.confirm-row {
+  display: flex;
+  gap: 8px;
+}
+
 .row {
   display: flex;
   gap: 8px;
@@ -971,6 +1001,28 @@ input[type="checkbox"] {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
+}
+
+.like-btn {
+  border-radius: var(--radius-full);
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+.like-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-body);
+}
+.like-btn.is-liked {
+  color: var(--accent, #3b82f6);
+}
+.like-btn.is-liked:hover {
+  color: var(--accent-hover, #2563eb);
 }
 
 .chip-row {

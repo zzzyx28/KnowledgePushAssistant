@@ -1,6 +1,7 @@
 import {
   createKnowledgeCard,
   getDomainStats,
+  getPushSummary,
   getRecentPushHistory,
   getSettings,
   getUserFeedback,
@@ -158,14 +159,28 @@ async function generateCard(input: {
   userPreference: string;
   domainName: string;
   domainKeywords: string;
+  recentTitles: string[];
 }): Promise<{ title: string; summary: string; detail: string }> {
+  const avoidSection = input.recentTitles.length > 0
+    ? [
+        "",
+        "【核心约束】以下主题近期已推送过，你必须生成一个与它们完全不同的主题：",
+        input.recentTitles.map((t, i) => `${i + 1}. ${t}`).join("\n"),
+        "",
+        "要求：",
+        "- 标题必须与上述任何一个都明显不同，不能是同义词替换或换个说法",
+        "- 必须选择一个上述列表未涉及的全新子话题或角度",
+        "- 即使是同一领域，也要探索未被覆盖的方向"
+      ].join("\n")
+    : "";
   const prompt = [
     "你是知识推送助手，请只输出 JSON，不要输出额外文本。",
     "字段必须为 title, summary, detail。",
     "title <= 20 字，summary <= 60 字，detail 为 3-5 段 Markdown。",
     `领域: ${input.domainName}`,
     `关键词: ${input.domainKeywords}`,
-    input.userPreference ? `用户偏好: ${input.userPreference}` : ""
+    input.userPreference ? `用户偏好: ${input.userPreference}` : "",
+    avoidSection
   ]
     .filter(Boolean)
     .join("\n");
@@ -220,8 +235,21 @@ interface ChatMessage {
 function buildSystemPrompt(userPreference: string): string {
   const preference = userPreference.trim();
   return [
-    "你是知识推送智能助手。你要在 2-3 轮内完成高质量推送。",
-    "优先读取设置、领域、历史、反馈，再决定具体领域。",
+    "你是知识推送智能助手。核心原则：内容多样性 > 领域轮换。",
+    "",
+    "决策流程：",
+    "1. 调用 getPushSummary + readPushHistory 了解各领域推送状况和近期具体内容",
+    "2. 若存在久未推送的领域，优先选择",
+    "3. 若所有领域近期都推送过，选同一领域内与近期主题完全不同的子话题",
+    "4. 对比 readPushHistory 的标题/摘要，确认新主题不雷同后调用 pushKnowledgeCard",
+    "",
+    "重要准则：",
+    "- 绝不能推送与近期标题含义相似的内容（这是唯一硬性约束）",
+    "- 领域较少时，同一领域可通过切换子话题实现多样推送",
+    "- 领域间轮换是加分项，不是必须项",
+    "- 只要内容不重复，短时间内多次推送同一领域的不同主题完全合理",
+    "- 仅在确实找不到任何新角度时才调用 skipPush",
+    "",
     "若适合推送，调用 pushKnowledgeCard；若不适合才调用 skipPush。",
     "title <= 20 字，summary <= 60 字，detail 为 3-5 段 Markdown。",
     preference ? `用户偏好: ${preference}` : ""
@@ -252,7 +280,7 @@ function buildToolSchemas() {
       type: "function",
       function: {
         name: "readPushHistory",
-        description: "读取最近推送历史",
+        description: "读取最近推送历史（含标题和摘要），用于避免重复推送相似内容",
         parameters: {
           type: "object",
           properties: { limit: { type: "integer", default: 10 } }
@@ -274,7 +302,15 @@ function buildToolSchemas() {
       type: "function",
       function: {
         name: "getDomainStats",
-        description: "获取领域维度统计和平均评分",
+        description: "获取领域维度统计（含推送次数、平均评分、最近推送时间），辅助判断领域选择",
+        parameters: { type: "object", properties: {}, required: [] }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "getPushSummary",
+        description: "获取各领域推送概览（推送次数、最近推送时间、距上次小时数、最近标题）。作为选择领域时的参考信息。",
         parameters: { type: "object", properties: {}, required: [] }
       }
     },
@@ -368,6 +404,9 @@ async function executeTool(
   if (toolName === "getDomainStats") {
     return JSON.stringify(await getDomainStats(), null, 2);
   }
+  if (toolName === "getPushSummary") {
+    return JSON.stringify(await getPushSummary(), null, 2);
+  }
   if (toolName === "pushKnowledgeCard") {
     const domains = (await listDomains()).filter((d) => d.is_enabled === 1);
     const target = resolveDomain(domains, normalizeInt(args.domainId, -1));
@@ -406,13 +445,23 @@ async function fallbackGenerationIfNeeded(
   if (title && summary && detail) {
     return { title: title.slice(0, 20), summary: summary.slice(0, 60), detail };
   }
+  const [recentHistory, pushSummary] = await Promise.all([
+    getRecentPushHistory(15),
+    getPushSummary()
+  ]);
+  const recentTitles = recentHistory.map((h) => h.title);
+  const summaryTitles: string[] = pushSummary
+    .filter((s): s is typeof s & { last_title: string } => s.last_title !== null)
+    .map((s) => s.last_title);
+  const allTitles = [...new Set([...recentTitles, ...summaryTitles])];
   return generateCard({
     baseUrl: settings.model_base_url,
     apiKey: settings.model_api_key,
     model: settings.model_name,
     userPreference: settings.user_preference_prompt,
     domainName: domain?.name ?? "未分类",
-    domainKeywords: domain?.keywords ?? ""
+    domainKeywords: domain?.keywords ?? "",
+    recentTitles: allTitles
   });
 }
 

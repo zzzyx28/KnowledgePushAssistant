@@ -46,6 +46,7 @@ export interface DomainStat {
   domain_name: string;
   count: number;
   avg_rating: number;
+  last_push_at: string | null;
 }
 
 export type AgentStepType = "thought" | "action" | "observation" | "final" | "error";

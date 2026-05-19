@@ -1,6 +1,6 @@
 [package]
 name = "knowledge-push-assistant-desktop"
-version = "0.1.0"
+version = "2.0.0"
 description = "Knowledge Push Assistant desktop app"
 authors = ["Knowledge Push Assistant Contributors"]
 edition = "2021"

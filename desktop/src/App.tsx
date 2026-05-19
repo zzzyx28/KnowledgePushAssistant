@@ -27,8 +27,10 @@ import {
   getSettings,
   listDomains,
   listKnowledge,
+  resetAllData,
   saveDomain,
-  saveSettings
+  saveSettings,
+  toggleFavorite
 } from "./core/repository";
 import { startScheduler, stopScheduler } from "./core/scheduler";
 import { DEFAULT_SETTINGS } from "./core/defaults";
@@ -66,6 +68,7 @@ export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [isRunning, setIsRunning] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   const latestLog = useMemo(() => logs[0] ?? "系统就绪", [logs]);
@@ -334,6 +337,22 @@ export default function App() {
     setDomainStats(domainStatRows);
   }
 
+  async function handleToggleFavorite(itemId: number): Promise<void> {
+    try {
+      const result = await toggleFavorite(itemId);
+      const newFav = result.is_favorited ? 1 : 0;
+      setKnowledge((prev) =>
+        prev.map((k) => (k.id === itemId ? { ...k, is_favorited: newFav, rating: newFav ? 5 : null } : k))
+      );
+      if (detailItem?.id === itemId) {
+        setDetailItem((prev) => (prev ? { ...prev, is_favorited: newFav, rating: newFav ? 5 : null } : null));
+      }
+      pushToast("success", result.is_favorited ? "已点赞" : "已取消点赞");
+    } catch (error) {
+      pushToast("error", `操作失败: ${String(error)}`);
+    }
+  }
+
   async function handleDeleteKnowledge(itemId: number): Promise<void> {
     try {
       await deleteKnowledgeItem(itemId);
@@ -347,6 +366,20 @@ export default function App() {
       pushToast("success", "知识已删除");
     } catch (error) {
       pushToast("error", `删除失败: ${String(error)}`);
+    }
+  }
+
+  async function handleReset(): Promise<void> {
+    setResetting(true);
+    try {
+      await resetAllData();
+      pushLog("数据已初始化");
+      pushToast("success", "已清除所有知识点和新增领域，保留默认领域");
+      await refreshAll();
+    } catch (error) {
+      pushToast("error", `初始化失败: ${String(error)}`);
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -439,6 +472,7 @@ export default function App() {
             onSearchChange={setSearchInput}
             onSelectItem={openKnowledgeDetail}
             onDeleteItem={(id) => { void handleDeleteKnowledge(id); }}
+            onToggleFavorite={(id) => { void handleToggleFavorite(id); }}
           />
         )}
 
@@ -458,6 +492,8 @@ export default function App() {
             onChange={setSettingsState}
             onSave={() => { void handleSaveSettings(); }}
             saving={savingSettings}
+            onReset={() => { void handleReset(); }}
+            resetting={resetting}
           />
         )}
       </main>
@@ -470,6 +506,7 @@ export default function App() {
           settings={settings}
           onClose={closeKnowledgeDetail}
           onExited={handleDetailExited}
+          onToggleFavorite={(id) => { void handleToggleFavorite(id); }}
         />
       )}
     </div>
