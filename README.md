@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/icon.png" width="80" alt="KPA icon" />
-</p>
-
 <h1 align="center">Knowledge Push Assistant</h1>
 
 <p align="center">
